@@ -1,0 +1,30 @@
+# macOS metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Build artifacts & dependencies
+build/
+bin/
+obj/
+dist/
+deps/
+*.o
+*.a
+*.dylib
+*.log
+
+# C# / .NET
+backup_dlls/
+*.user
+*.suo
+
+# Game data (never commit game assets)
+Content/
+*.bin
+*.toml
+*.iss
+*.bat
+src/imgui/imgui/
+src/imgui/implot/

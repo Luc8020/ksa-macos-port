@@ -1,0 +1,10 @@
+--- a/spirv_msl.hpp
++++ b/spirv_msl.hpp
+@@ -287,7 +287,7 @@ static const uint32_t kArgumentBufferBinding = ~(3u);
+ 
+ // Somewhat arbitrary. Can't be too large or it starts eating into builtin magic buffers, etc.
+-static const uint32_t kMaxArgumentBuffers = 8;
++static const uint32_t kMaxArgumentBuffers = 16;
+ 
+ // Decompiles SPIR-V to Metal Shading Language
+ class CompilerMSL : public CompilerGLSL
