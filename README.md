@@ -5,6 +5,7 @@
 [![Graphics](https://img.shields.io/badge/Graphics-Vulkan%201.4%20%E2%86%92%20Metal%203%20(MoltenVK)-orange.svg?logo=vulkan)](https://github.com/KhronosGroup/MoltenVK)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+
 Complete toolkit, native C/C++ wrappers, compiler patches, and step-by-step documentation to convert and run the Linux build of **Kitten Space Agency (KSA)** (`v2026.10.13.5602+`) **100% natively on macOS Apple Silicon (M1 / M2 / M3 / M4)** — with **all graphics features enabled** (Atmosphere, Volumetric Clouds, Cloud Shadows, Terrain Shadows, Godrays, Ground Clutter, Vessel Cascade Shadows, and FMOD Audio) and zero x86 emulation (no Rosetta 2, no Wine/CrossOver).
 
 ---
@@ -310,6 +311,11 @@ kernel void main0(
 #### Root Cause 2: Null-Pipeline Dereference Crash in `MVKCmdPipeline.mm`
 If any compute or graphics pipeline fails to compile, MoltenVK returns `VK_NULL_HANDLE` (`0x0`). When KSA subsequently calls `vkCmdBindPipeline(cmdBuf, bindPoint, VK_NULL_HANDLE)`, MoltenVK dereferences the null `_pipeline` pointer in `MVKCmdBindGraphicsPipeline::isTessellationPipeline()`, crashing the entire game with `SIGSEGV` (`KERN_INVALID_ADDRESS at 0x5d7`).
 
+#### Root Cause 3: Mid-Gameplay GPU Page Fault (`kIOGPUCommandBufferCallbackErrorPageFault` / `VK_ERROR_DEVICE_LOST`)
+During extended gameplay, two macOS/Metal interactions caused a GPU page fault (`0000000b:kIOGPUCommandBufferCallbackErrorPageFault` on `Queue 0-0` and `00000005:kIOGPUCommandBufferCallbackErrorInnocentVictim` on `Queue 1-0`):
+1. **macOS 15+ `MTLResidencySet` vs. VMA Suballocated `MTLHeap`s:** On macOS 15+, MoltenVK enables `MTLResidencySet` (`_metalFeatures.residencySets = true`), adding both the parent `MTLHeap` and individual suballocated `MTLBuffer`/`MTLTexture` objects to the queue's residency set and immediately committing removals on background threads when KSA streams out planetary/clutter buffers. This triggers `IOGPUCommandDescriptor::prepare: preparedBytes != requiredBytes` in the macOS AGX kernel driver and unmaps GPU pages while in-flight command buffers are still reading them. Disabling `_metalFeatures.residencySets` in `MVKDevice.mm` and enabling `MVK_CONFIG_LIVE_CHECK_ALL_RESOURCES=1` forces MoltenVK to use per-encoder `[MTLCommandEncoder useResource:usage:]` with live resource tracking and `MTLCommandBuffer` resource retention (`needsRetain = true`).
+2. **Unsynchronized Dual-Queue Ocean Readbacks (`Queue 0-0` vs. `Queue 1-0`):** KSA's `OceanRenderer.PerformReadBack` submits compute readbacks on `Queue 1-0` (`_renderer.Compute`) without cross-queue wait semaphores while `Queue 0-0` (`_renderer.Graphics`) is writing the wave buffers. Setting `MVK_CONFIG_VK_SEMAPHORE_SUPPORT_STYLE=0` (`MVK_CONFIG_VK_SEMAPHORE_SUPPORT_STYLE_SINGLE_QUEUE`) and `MVK_CONFIG_RESUME_LOST_DEVICE=1` ensures all Graphics, Compute, and Transfer submissions serialize cleanly on `Queue 0-0`.
+
 #### How to Build the Patched `libMoltenVK.dylib`
 Run [`./build_moltenvk.sh`](build_moltenvk.sh), or execute these steps manually:
 ```bash
@@ -320,7 +326,7 @@ cd deps/MoltenVK
 # 1. Increase kMaxArgumentBuffers from 8 to 16 in SPIRV-Cross (Metal supports 31 buffers per stage)
 sed -i '' 's/kMaxArgumentBuffers = 8;/kMaxArgumentBuffers = 16;/g' External/SPIRV-Cross/spirv_msl.hpp
 
-# 2. Apply null-pipeline safety guards in MoltenVK/MoltenVK/Commands/MVKCmdPipeline.mm
+# 2. Apply null-pipeline guards, disable broken MTLResidencySet, and set safe default configs
 git apply ../../patches/moltenvk-pipeline-null-guard.patch
 
 # 3. Rebuild SPIRV-Cross static archives & package SPIRVCross.xcframework
@@ -347,9 +353,12 @@ cp Package/Release/MoltenVK/dynamic/dylib/macOS/libMoltenVK.dylib /path/to/game/
 To ensure the game runs on any Apple Silicon Mac without requiring Homebrew or global environment variables:
 1. **`MoltenVK_icd.json`** uses a relative path (`"./libMoltenVK.dylib"`) so the Vulkan Loader (`libvulkan.1.dylib`) always loads the patched `libMoltenVK.dylib` from the game directory rather than an unpatched Homebrew MoltenVK.
 2. **`start_mac.command`** sets:
-   - `DYLD_LIBRARY_PATH` and `DYLD_FALLBACK_LIBRARY_PATH` to the game folder (`$DIR`)
+   - `DYLD_LIBRARY_PATH` to the game folder (`$DIR`)
    - `VK_ICD_FILENAMES="$DIR/MoltenVK_icd.json"` and `VK_DRIVER_FILES="$DIR/MoltenVK_icd.json"`
    - `MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=1` (enables Metal Argument Buffers for all descriptor sets)
+   - `MVK_CONFIG_LIVE_CHECK_ALL_RESOURCES=1` (prevents GPU page faults when streaming/destroying resources)
+   - `MVK_CONFIG_VK_SEMAPHORE_SUPPORT_STYLE=0` (single-queue mode on `Queue 0-0` to avoid cross-queue races)
+   - `MVK_CONFIG_RESUME_LOST_DEVICE=1` (recovers gracefully from transient GPU timeouts)
    - `MVK_CONFIG_FAST_MATH_ENABLED=1`
 3. **Ad-hoc Code Signing (`codesign`):**  
    Whenever `install_name_tool` modifies a Mach-O `.dylib` on Apple Silicon, its code signature is invalidated, causing macOS `amfid` to kill the process with `SIGKILL (Killed: 9)`. Always re-sign modified `.dylib` files:

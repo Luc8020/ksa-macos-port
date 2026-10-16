@@ -40,3 +40,45 @@ index 3e9fc79..9fb0561 100644
  }
  
  
+diff --git a/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm b/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
+index 359f8a2..9d8b265 100644
+--- a/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
++++ b/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
+@@ -2614,7 +2614,7 @@
+ 		_metalFeatures.maxPerStageTextureCount = 128;
+ 
+ 		_metalFeatures.astcHDRTextures = !MVK_TVOS || mvkOSVersionIsAtLeast(16.0);
+-		_metalFeatures.residencySets = mvkOSVersionIsAtLeast(15.0, 18.0, 2.0);
++		_metalFeatures.residencySets = false;
+ 		_metalFeatures.simdPermute = true;
+ 	}
+ 
+diff --git a/MoltenVK/MoltenVK/Utility/MVKEnvironment.h b/MoltenVK/MoltenVK/Utility/MVKEnvironment.h
+index e6d176c..bae7f48 100644
+--- a/MoltenVK/MoltenVK/Utility/MVKEnvironment.h
++++ b/MoltenVK/MoltenVK/Utility/MVKEnvironment.h
+@@ -241,7 +241,7 @@ void mvkSetConfig(MVKConfiguration& dstMVKConfig, const MVKConfiguration& srcMVK
+  * By default, use Metal events, if availalble, on most platforms.
+  */
+ #ifndef MVK_CONFIG_VK_SEMAPHORE_SUPPORT_STYLE
+-#   define MVK_CONFIG_VK_SEMAPHORE_SUPPORT_STYLE    MVK_CONFIG_VK_SEMAPHORE_SUPPORT_STYLE_METAL_EVENTS_WHERE_SAFE
++#   define MVK_CONFIG_VK_SEMAPHORE_SUPPORT_STYLE    MVK_CONFIG_VK_SEMAPHORE_SUPPORT_STYLE_SINGLE_QUEUE
+ #endif
+ #ifndef MVK_CONFIG_ALLOW_METAL_EVENTS
+ #   define MVK_CONFIG_ALLOW_METAL_EVENTS    1
+@@ -291,7 +291,7 @@ void mvkSetConfig(MVKConfiguration& dstMVKConfig, const MVKConfiguration& srcMVK
+ 
+ /** Resume MVKDevice VK_ERROR_DEVICE_LOST errors that do not cause MVKPhysicalDevice errors. Disabled by default. */
+ #ifndef MVK_CONFIG_RESUME_LOST_DEVICE
+-#   define MVK_CONFIG_RESUME_LOST_DEVICE    0
++#   define MVK_CONFIG_RESUME_LOST_DEVICE    1
+ #endif
+ 
+ /** Support Metal argument buffers. Enabled by default. */
+@@ -348,5 +348,5 @@ void mvkSetConfig(MVKConfiguration& dstMVKConfig, const MVKConfiguration& srcMVK
+  * If setting this helps your application, your application is probably violating the Vulkan spec.
+  */
+ #ifndef MVK_CONFIG_LIVE_CHECK_ALL_RESOURCES
+-#   define MVK_CONFIG_LIVE_CHECK_ALL_RESOURCES 0
++#   define MVK_CONFIG_LIVE_CHECK_ALL_RESOURCES 1
+ #endif
